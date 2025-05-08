@@ -2,53 +2,77 @@
 <html lang="ar">
 <head>
   <meta charset="UTF-8">
-  <title>نظام التعرف على الوجه</title>
-  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
-  <style>
-    body { text-align: center; direction: rtl; font-family: Arial; }
-    video, canvas { position: absolute; left: 50%; transform: translateX(-50%); }
-    h2 { margin-top: 20px; }
-  </style>
-</head>
-<body>
-  <h2>نظام التعرف على الوجه - الكاميرا</h2>
-  <video id="video" width="720" height="560" autoplay muted></video>
-  <canvas id="overlay" width="720" height="560"></canvas>
+  <title>تحضير المعلمين عبر الموقع</title>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+    import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
-  <script>
-    const video = document.getElementById('video');
+    const firebaseConfig = {
+      apiKey: "AIzaSyCr4T8GLRxtf_6LNrokjKvmBOwSkuGO5yQ",
+      authDomain: "hamsa-6009e.firebaseapp.com",
+      databaseURL: "https://hamsa-6009e-default-rtdb.firebaseio.com",
+      projectId: "hamsa-6009e",
+      storageBucket: "hamsa-6009e.appspot.com",
+      messagingSenderId: "998163671039",
+      appId: "1:998163671039:web:d1930ea5b71a3a3fc729ca",
+      measurementId: "G-PD1QB8X0FE"
+    };
 
-    // تحميل النماذج من مجلد محلي
-    Promise.all([
-      faceapi.nets.tinyFaceDetector.loadFromUri('./models'),
-      faceapi.nets.faceLandmark68Net.loadFromUri('./models'),
-      faceapi.nets.faceRecognitionNet.loadFromUri('./models')
-    ]).then(startVideo);
+    const app = initializeApp(firebaseConfig);
+    const database = getDatabase(app);
 
-    function startVideo() {
-      navigator.mediaDevices.getUserMedia({ video: {} })
-        .then(stream => {
-          video.srcObject = stream;
-        })
-        .catch(err => console.error('خطأ في الوصول إلى الكاميرا:', err));
+    function getDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371e3; // meters
+      const φ1 = lat1 * Math.PI/180;
+      const φ2 = lat2 * Math.PI/180;
+      const Δφ = (lat2-lat1) * Math.PI/180;
+      const Δλ = (lon2-lon1) * Math.PI/180;
+
+      const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                Math.cos(φ1) * Math.cos(φ2) *
+                Math.sin(Δλ/2) * Math.sin(Δλ/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+      return R * c;
     }
 
-    video.addEventListener('play', () => {
-      const canvas = document.getElementById('overlay');
-      const displaySize = { width: video.width, height: video.height };
-      faceapi.matchDimensions(canvas, displaySize);
+    window.onload = () => {
+      const btn = document.getElementById("checkBtn");
+      btn.onclick = () => {
+        navigator.geolocation.getCurrentPosition(async (pos) => {
+          const userLat = pos.coords.latitude;
+          const userLng = pos.coords.longitude;
 
-      setInterval(async () => {
-        const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
-          .withFaceLandmarks()
-          .withFaceDescriptors();
-        const resizedDetections = faceapi.resizeResults(detections, displaySize);
-        const context = canvas.getContext('2d');
-        context.clearRect(0, 0, canvas.width, canvas.height);
-        faceapi.draw.drawDetections(canvas, resizedDetections);
-        faceapi.draw.drawFaceLandmarks(canvas, resizedDetections);
-      }, 100);
-    });
+          // موقع المدرسة (غيره لما يناسبك)
+          const schoolLat = 24.774265;
+          const schoolLng = 46.738586;
+
+          const distance = getDistance(userLat, userLng, schoolLat, schoolLng);
+          const radius = 100; // 100 متر
+
+          if (distance <= radius) {
+            const teacherName = prompt("أدخل اسمك:");
+            const now = new Date().toISOString();
+            await set(ref(database, 'attendance/' + teacherName), {
+              name: teacherName,
+              time: now,
+              latitude: userLat,
+              longitude: userLng,
+              status: "حاضر"
+            });
+            alert("تم تسجيل حضورك بنجاح.");
+          } else {
+            alert("أنت خارج نطاق المدرسة!");
+          }
+        }, (err) => {
+          alert("خطأ في تحديد الموقع: " + err.message);
+        });
+      };
+    };
   </script>
+</head>
+<body style="text-align:center; margin-top: 50px;">
+  <h2>نظام تحضير المعلمين عبر الموقع الجغرافي</h2>
+  <button id="checkBtn" style="padding:15px 30px; font-size:18px;">تسجيل الحضور</button>
 </body>
 </html>
