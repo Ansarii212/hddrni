@@ -2,11 +2,70 @@
 <html lang="ar">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>نظام حضور المعلمين</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      direction: rtl;
+      background-color: #f9f9f9;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 500px;
+      margin: 30px auto;
+      padding: 20px;
+      border: 2px solid #ccc;
+      border-radius: 10px;
+      background-color: #fff;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    h2 {
+      text-align: center;
+      color: #333;
+    }
+    input, button {
+      width: 100%;
+      padding: 12px;
+      margin: 8px 0;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 16px;
+    }
+    button {
+      background-color: #007bff;
+      color: #fff;
+      border: none;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .hidden {
+      display: none;
+    }
+    #logoutBtn {
+      position: fixed;
+      top: 15px;
+      left: 15px;
+      background: none;
+      border: none;
+      font-size: 24px;
+      color: #f00;
+      cursor: pointer;
+    }
+    #userPhoto {
+      width: 100px;
+      height: 100px;
+      object-fit: cover;
+      border-radius: 50%;
+      margin: 10px auto;
+      display: block;
+    }
+  </style>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
     import { getDatabase, ref, set, push, get, child } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-database.js";
-    import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-storage.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyCr4T8GLRxtf_6LNrokjKvmBOwSkuGO5yQ",
@@ -15,207 +74,146 @@
       projectId: "hamsa-6009e",
       storageBucket: "hamsa-6009e.appspot.com",
       messagingSenderId: "998163671039",
-      appId: "1:998163671039:web:d1930ea5b71a3a3fc729ca"
+      appId: "1:998163671039:web:d1930ea5b71a3a3fc729ca",
+      measurementId: "G-PD1QB8X0FE"
     };
 
     const app = initializeApp(firebaseConfig);
-    const database = getDatabase(app);
-    const storage = getStorage(app);
+    const db = getDatabase(app);
 
     let currentUser = null;
+    let currentUserName = "";
+    let currentUserPhoto = "";
 
     window.showRegister = () => {
-      document.getElementById("registerSection").style.display = "block";
-      document.getElementById("loginSection").style.display = "none";
-      document.getElementById("attendanceSection").style.display = "none";
-    };
-
-    window.showLogin = () => {
-      document.getElementById("registerSection").style.display = "none";
-      document.getElementById("loginSection").style.display = "block";
-      document.getElementById("attendanceSection").style.display = "none";
+      document.getElementById("registerSection").classList.remove("hidden");
+      document.getElementById("loginSection").classList.add("hidden");
+      document.getElementById("attendanceSection").classList.add("hidden");
     };
 
     window.logout = () => {
-      currentUser = null;
-      showLogin();
+      document.getElementById("loginSection").classList.remove("hidden");
+      document.getElementById("attendanceSection").classList.add("hidden");
+      document.getElementById("logoutBtn").classList.add("hidden");
     };
 
     window.register = async () => {
-      const fullName = document.getElementById("fullName").value.trim();
+      const fullName = document.getElementById("regName").value.trim();
       const phone = document.getElementById("regPhone").value.trim();
       const password = document.getElementById("regPassword").value.trim();
-      const imageFile = document.getElementById("profileImage").files[0];
-      const registerMsg = document.getElementById("registerMsg");
+      const photoInput = document.getElementById("regPhoto");
 
-      const passwordRegex = /^(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_\-+=<>?{}[\]\\|~`.,:;"']).{8,}$/;
-      if (!passwordRegex.test(password)) {
-        registerMsg.innerText = "كلمة المرور ضعيفة: يجب أن تحتوي على حرف كبير، أرقام ورمز.";
+      if (fullName === "" || phone === "" || password === "" || !photoInput.files[0]) {
+        alert("يرجى تعبئة جميع الحقول ورفع الصورة");
         return;
       }
 
-      if (!imageFile) {
-        registerMsg.innerText = "يرجى اختيار صورة.";
+      if (!/(?=.*[A-Z])(?=.*\\d)(?=.*[^\\w\\s]).{8,}/.test(password)) {
+        alert("كلمة المرور ضعيفة: يجب أن تحتوي على 8 أحرف على الأقل، حرف كبير، رقم، ورمز.");
         return;
       }
 
-      const imageRef = sRef(storage, 'profiles/' + phone + '_' + imageFile.name);
-      await uploadBytes(imageRef, imageFile);
-      const imageURL = await getDownloadURL(imageRef);
-
-      set(ref(database, "users/" + phone), {
-        fullName,
-        phone,
-        password,
-        imageURL
-      }).then(() => {
-        registerMsg.innerText = "تم التسجيل بنجاح. يمكنك الآن تسجيل الدخول.";
-        showLogin();
-      }).catch(err => {
-        registerMsg.innerText = "خطأ أثناء التسجيل: " + err.message;
-      });
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const photoData = reader.result;
+        await set(ref(db, "users/" + phone), {
+          name: fullName,
+          phone,
+          password,
+          photo: photoData
+        });
+        alert("تم التسجيل بنجاح");
+        document.getElementById("registerSection").classList.add("hidden");
+        document.getElementById("loginSection").classList.remove("hidden");
+      };
+      reader.readAsDataURL(photoInput.files[0]);
     };
 
     window.login = async () => {
       const phone = document.getElementById("loginPhone").value.trim();
       const password = document.getElementById("loginPassword").value.trim();
-      const loginMsg = document.getElementById("loginMsg");
+      const snapshot = await get(child(ref(db), "users/" + phone));
 
-      try {
-        const userSnap = await get(child(ref(database), "users/" + phone));
-        if (!userSnap.exists()) {
-          loginMsg.innerText = "رقم الجوال غير مسجل.";
-          return;
-        }
-
-        const userData = userSnap.val();
-        if (userData.password !== password) {
-          loginMsg.innerText = "كلمة المرور غير صحيحة.";
-          return;
-        }
-
-        currentUser = userData;
-        document.getElementById("welcome").innerHTML = `مرحباً، ${userData.fullName.split(" ")[0]} <img src="${userData.imageURL}" width="60" style="border-radius:50%">`;
-        document.getElementById("loginSection").style.display = "none";
-        document.getElementById("attendanceSection").style.display = "block";
-      } catch (err) {
-        loginMsg.innerText = "خطأ: " + err.message;
-      }
-    };
-
-    window.registerAttendance = async () => {
-      const output = document.getElementById("attendanceResult");
-      if (!navigator.geolocation) {
-        output.innerText = "المتصفح لا يدعم تحديد الموقع.";
+      if (!snapshot.exists()) {
+        alert("رقم الجوال غير مسجل");
         return;
       }
 
-      navigator.geolocation.getCurrentPosition(async (pos) => {
-        const lat = pos.coords.latitude.toFixed(6);
-        const lng = pos.coords.longitude.toFixed(6);
-        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const data = snapshot.val();
+      if (data.password !== password) {
+        alert("كلمة المرور غير صحيحة");
+        return;
+      }
 
-        const attendanceRef = ref(database, "attendance/" + currentUser.phone);
-        await push(attendanceRef, {
-          fullName: currentUser.fullName,
-          phone: currentUser.phone,
-          imageURL: currentUser.imageURL,
+      currentUser = phone;
+      currentUserName = data.name.split(" ")[0];
+      currentUserPhoto = data.photo;
+
+      document.getElementById("userName").innerText = "مرحباً " + currentUserName;
+      document.getElementById("userPhoto").src = currentUserPhoto;
+
+      document.getElementById("loginSection").classList.add("hidden");
+      document.getElementById("attendanceSection").classList.remove("hidden");
+      document.getElementById("logoutBtn").classList.remove("hidden");
+    };
+
+    window.registerAttendance = async () => {
+      const status = document.getElementById("attendanceStatus");
+      if (!navigator.geolocation) {
+        status.innerText = "المتصفح لا يدعم تحديد الموقع.";
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(async (position) => {
+        const lat = position.coords.latitude.toFixed(6);
+        const lng = position.coords.longitude.toFixed(6);
+        const now = new Date();
+        const time = now.getHours() + ":" + now.getMinutes();
+
+        const userSnapshot = await get(child(ref(db), "users/" + currentUser));
+        const userData = userSnapshot.val();
+
+        push(ref(db, "attendance/" + currentUser), {
+          name: userData.name,
+          phone: currentUser,
+          photo: userData.photo,
           time,
-          latitude: lat,
-          longitude: lng
+          lat,
+          lng
         });
 
-        output.innerHTML = `تم تسجيل الحضور بنجاح<br><b>الوقت:</b> ${time}`;
-      }, err => {
-        output.innerText = "خطأ في تحديد الموقع: " + err.message;
+        status.innerText = "تم تسجيل الحضور الساعة " + time;
+      }, (error) => {
+        status.innerText = "خطأ في تحديد الموقع: " + error.message;
       });
     };
   </script>
-
-  <style>
-    body {
-      direction: rtl;
-      font-family: 'Segoe UI', sans-serif;
-      background: #f0f0f0;
-      margin: 0;
-      padding: 0;
-      text-align: center;
-    }
-
-    .section {
-      display: none;
-      margin: auto;
-      margin-top: 30px;
-      padding: 20px;
-      width: 90%;
-      max-width: 400px;
-      background: white;
-      border-radius: 10px;
-      border: 2px solid #007bff;
-      box-shadow: 0 0 15px rgba(0,0,0,0.1);
-    }
-
-    input, button {
-      width: 90%;
-      padding: 10px;
-      margin: 8px auto;
-      display: block;
-      font-size: 16px;
-      border-radius: 5px;
-      border: 1px solid #ccc;
-    }
-
-    button {
-      background-color: #007bff;
-      color: white;
-      cursor: pointer;
-    }
-
-    #welcome {
-      font-size: 20px;
-      margin: 15px;
-    }
-
-    #logoutBtn {
-      position: absolute;
-      left: 15px;
-      top: 15px;
-      font-size: 24px;
-      background: none;
-      border: none;
-      cursor: pointer;
-      color: red;
-    }
-  </style>
 </head>
 <body>
+  <button id="logoutBtn" onclick="logout()">&#x274C;</button>
 
-  <button onclick="logout()" id="logoutBtn" style="display:none;">⎋</button>
-
-  <div id="registerSection" class="section">
-    <h3>تسجيل حساب جديد</h3>
-    <input type="text" id="fullName" placeholder="الاسم الرباعي">
-    <input type="text" id="regPhone" placeholder="رقم الجوال">
-    <input type="password" id="regPassword" placeholder="كلمة المرور (8 أحرف، رمز، رقم، حرف كبير)">
-    <input type="file" id="profileImage" accept="image/*">
+  <div class="container hidden" id="registerSection">
+    <h2>تسجيل حساب جديد</h2>
+    <input id="regName" placeholder="الاسم الرباعي">
+    <input id="regPhone" placeholder="رقم الجوال">
+    <input id="regPassword" type="password" placeholder="كلمة المرور">
+    <input id="regPhoto" type="file" accept="image/*">
     <button onclick="register()">تسجيل</button>
-    <p id="registerMsg" style="color:green;"></p>
   </div>
 
-  <div id="loginSection" class="section" style="display:block;">
-    <h3>تسجيل الدخول</h3>
-    <input type="text" id="loginPhone" placeholder="رقم الجوال">
-    <input type="password" id="loginPassword" placeholder="كلمة المرور">
+  <div class="container" id="loginSection">
+    <h2>تسجيل دخول</h2>
+    <input id="loginPhone" placeholder="رقم الجوال">
+    <input id="loginPassword" type="password" placeholder="كلمة المرور">
     <button onclick="login()">دخول</button>
-    <p id="loginMsg" style="color:red;"></p>
     <button onclick="showRegister()">تسجيل حساب جديد</button>
   </div>
 
-  <div id="attendanceSection" class="section">
-    <div id="welcome"></div>
+  <div class="container hidden" id="attendanceSection">
+    <h2 id="userName">مرحباً</h2>
+    <img id="userPhoto" src="" alt="الصورة">
     <button onclick="registerAttendance()">تسجيل الحضور</button>
-    <div id="attendanceResult" style="margin-top:15px;color:green;"></div>
+    <p id="attendanceStatus"></p>
   </div>
-
 </body>
 </html>
