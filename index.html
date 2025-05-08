@@ -1,14 +1,14 @@
+<!-- انسخ الكود التالي كاملاً إلى المحرر -->
 <!DOCTYPE html>
 <html lang="ar">
 <head>
   <meta charset="UTF-8">
-  <title>نظام حضور المعلمين بالموقع</title>
+  <title>نظام حضور المعلمين</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
-    import { getDatabase, ref, set, push, get, child } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-database.js";
-    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
+    import { getDatabase, ref, set, push, get, child, onValue } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-database.js";
 
-    // إعداد Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyCr4T8GLRxtf_6LNrokjKvmBOwSkuGO5yQ",
       authDomain: "hamsa-6009e.firebaseapp.com",
@@ -16,133 +16,98 @@
       projectId: "hamsa-6009e",
       storageBucket: "hamsa-6009e.appspot.com",
       messagingSenderId: "998163671039",
-      appId: "1:998163671039:web:d1930ea5b71a3a3fc729ca",
-      measurementId: "G-PD1QB8X0FE"
+      appId: "1:998163671039:web:d1930ea5b71a3a3fc729ca"
     };
 
     const app = initializeApp(firebaseConfig);
-    const database = getDatabase(app);
-    const auth = getAuth(app);
-
-    let isAdmin = false;
+    const db = getDatabase(app);
     let currentUser = null;
 
-    // تحقق من كلمة مرور قوية
-    function validatePassword(password) {
-      const regex = /^(?=.*[A-Z])(?=.*\d)(?=.*[$#%]).{8,}$/;
-      return regex.test(password);
-    }
-
-    // تسجيل حساب جديد
-    window.registerAccount = async function () {
-      const fullName = document.getElementById("fullName").value.trim();
-      const phone = document.getElementById("phone").value.trim();
-      const password = document.getElementById("password").value.trim();
-      const fileInput = document.getElementById("profilePic");
-
-      if (!validatePassword(password)) {
-        alert("كلمة المرور يجب أن تحتوي على 8 أحرف على الأقل مع حرف كابيتال، رقم، ورمز خاص ($#%)");
-        return;
-      }
-
-      try {
-        const userCredential = await createUserWithEmailAndPassword(auth, phone + "@example.com", password);
-        currentUser = userCredential.user;
-
-        const profilePic = fileInput.files[0] ? URL.createObjectURL(fileInput.files[0]) : '';
-
-        await updateProfile(currentUser, {
-          displayName: fullName,
-          photoURL: profilePic
-        });
-
-        await set(ref(database, 'users/' + currentUser.uid), {
-          fullName,
-          phone,
-          profilePic
-        });
-
-        document.getElementById("registerSection").style.display = "none";
-        document.getElementById("loginSection").style.display = "block";
-      } catch (error) {
-        alert(error.message);
+    window.onload = () => {
+      if (localStorage.getItem("userPhone")) {
+        loginWithPhone(localStorage.getItem("userPhone"), localStorage.getItem("userPass"));
       }
     };
 
-    // تسجيل دخول
+    window.register = async function () {
+      const fullName = document.getElementById("fullName").value.trim();
+      const phone = document.getElementById("regPhone").value.trim();
+      const password = document.getElementById("regPass").value.trim();
+      const image = document.getElementById("photo").value.trim();
+
+      if (fullName === "" || phone === "" || password === "" || image === "") {
+        alert("يرجى تعبئة جميع الحقول.");
+        return;
+      }
+
+      const passRegex = /^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
+      if (!passRegex.test(password)) {
+        alert("كلمة المرور يجب أن تكون 8 أحرف على الأقل وتحتوي على حرف كبير ورقم ورمز.");
+        return;
+      }
+
+      await set(ref(db, "users/" + phone), {
+        fullName,
+        password,
+        image
+      });
+
+      alert("تم التسجيل بنجاح، يمكنك تسجيل الدخول الآن.");
+      document.getElementById("registerSection").style.display = "none";
+      document.getElementById("loginSection").style.display = "block";
+    };
+
     window.login = async function () {
       const phone = document.getElementById("loginPhone").value.trim();
-      const password = document.getElementById("loginPassword").value.trim();
-
-      try {
-        const userCredential = await signInWithEmailAndPassword(auth, phone + "@example.com", password);
-        currentUser = userCredential.user;
-
-        const userRef = ref(database, 'users/' + currentUser.uid);
-        get(userRef).then((snapshot) => {
-          if (snapshot.exists()) {
-            const userData = snapshot.val();
-            document.getElementById("userName").innerText = `مرحباً، ${userData.fullName}`;
-            document.getElementById("userPic").src = userData.profilePic || "default.png";
-          }
-        });
-
-        document.getElementById("loginSection").style.display = "none";
-        document.getElementById("attendanceSection").style.display = "block";
-      } catch (error) {
-        alert("فشل في تسجيل الدخول: " + error.message);
-      }
+      const password = document.getElementById("loginPass").value.trim();
+      loginWithPhone(phone, password);
     };
 
-    // تحديد موقع المدرسة
-    window.setSchoolLocation = function () {
-      const status = document.getElementById("adminStatus");
-
-      if (!navigator.geolocation) {
-        status.innerText = "المتصفح لا يدعم تحديد الموقع.";
+    async function loginWithPhone(phone, password) {
+      const snap = await get(child(ref(db), "users/" + phone));
+      if (!snap.exists()) {
+        alert("رقم الجوال غير مسجل.");
         return;
       }
 
-      navigator.geolocation.getCurrentPosition((position) => {
-        const lat = position.coords.latitude.toFixed(6);
-        const lng = position.coords.longitude.toFixed(6);
-        set(ref(database, "schoolLocation"), { lat, lng }).then(() => {
-          status.innerText = `تم حفظ موقع المدرسة: ${lat}, ${lng}`;
-        }).catch((err) => {
-          status.innerText = "خطأ: " + err.message;
-        });
-      }, (error) => {
-        status.innerText = "خطأ في تحديد الموقع: " + error.message;
-      });
+      const data = snap.val();
+      if (data.password !== password) {
+        alert("كلمة المرور غير صحيحة.");
+        return;
+      }
+
+      currentUser = { ...data, phone };
+      localStorage.setItem("userPhone", phone);
+      localStorage.setItem("userPass", password);
+
+      document.getElementById("loginSection").style.display = "none";
+      document.getElementById("logoutBtn").style.display = "block";
+      document.getElementById("welcome").innerHTML = `مرحباً ${currentUser.fullName.split(" ")[0]} <img src="${currentUser.image}" width="40" style="border-radius:50%">`;
+      document.getElementById("attendanceSection").style.display = "block";
+    }
+
+    window.logout = function () {
+      localStorage.removeItem("userPhone");
+      localStorage.removeItem("userPass");
+      location.reload();
     };
 
-    // حساب المسافة بين نقطتين (نقطة المدرسة ونقطة المعلم)
     function getDistance(lat1, lon1, lat2, lon2) {
-      const R = 6371e3; // نصف قطر الأرض بالمتر
+      const R = 6371e3;
       const φ1 = lat1 * Math.PI / 180;
       const φ2 = lat2 * Math.PI / 180;
       const Δφ = (lat2 - lat1) * Math.PI / 180;
       const Δλ = (lon2 - lon1) * Math.PI / 180;
 
-      const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-        Math.cos(φ1) * Math.cos(φ2) *
-        Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-      const d = R * c;
-      return d;
+      const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                Math.cos(φ1) * Math.cos(φ2) *
+                Math.sin(Δλ/2) * Math.sin(Δλ/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
     }
 
-    // تسجيل الحضور
     window.registerAttendance = async function () {
-      const teacherId = document.getElementById("teacherId").value.trim();
       const output = document.getElementById("location");
-
-      if (teacherId === "") {
-        output.innerText = "يرجى إدخال اسم المعلم أو رقمه الوظيفي.";
-        return;
-      }
-
       if (!navigator.geolocation) {
         output.innerText = "المتصفح لا يدعم تحديد الموقع.";
         return;
@@ -151,37 +116,35 @@
       navigator.geolocation.getCurrentPosition(async (position) => {
         const lat = position.coords.latitude;
         const lng = position.coords.longitude;
-        const timestamp = new Date().toISOString();
+        const time = new Date();
+        const timeStr = `${time.getHours()}:${String(time.getMinutes()).padStart(2, '0')}`;
 
-        try {
-          const snap = await get(child(ref(database), "schoolLocation"));
-          if (!snap.exists()) {
-            output.innerText = "لم يتم تسجيل موقع المدرسة بعد.";
-            return;
-          }
-
-          const schoolLat = parseFloat(snap.val().lat);
-          const schoolLng = parseFloat(snap.val().lng);
-          const distance = getDistance(lat, lng, schoolLat, schoolLng);
-
-          if (distance > 200) {
-            output.innerHTML = `المعلم خارج نطاق المدرسة. (المسافة: ${Math.round(distance)} متر)`;
-            return;
-          }
-
-          push(ref(database, "attendance/" + teacherId), {
-            latitude: lat.toFixed(6),
-            longitude: lng.toFixed(6),
-            timestamp
-          });
-
-          output.innerHTML = `تم تسجيل الحضور بنجاح<br><b>الوقت:</b> ${timestamp}`;
-        } catch (err) {
-          output.innerText = "حدث خطأ أثناء التحقق من موقع المدرسة: " + err.message;
+        const schoolSnap = await get(child(ref(db), "schoolLocation"));
+        if (!schoolSnap.exists()) {
+          output.innerText = "لم يتم تحديد موقع المدرسة بعد.";
+          return;
         }
 
+        const school = schoolSnap.val();
+        const distance = getDistance(lat, lng, parseFloat(school.lat), parseFloat(school.lng));
+
+        if (distance > 200) {
+          output.innerText = `خارج نطاق المدرسة (${Math.round(distance)} متر).`;
+          return;
+        }
+
+        await push(ref(db, "attendance/" + currentUser.phone), {
+          fullName: currentUser.fullName,
+          phone: currentUser.phone,
+          image: currentUser.image,
+          time: timeStr,
+          latitude: lat,
+          longitude: lng
+        });
+
+        output.innerText = `تم تسجيل الحضور الساعة ${timeStr}`;
       }, (error) => {
-        output.innerText = "فشل في تحديد الموقع: " + error.message;
+        output.innerText = "فشل تحديد الموقع: " + error.message;
       });
     };
   </script>
@@ -190,60 +153,78 @@
     body {
       font-family: Arial, sans-serif;
       direction: rtl;
+      background: #f9f9f9;
       text-align: center;
-      padding-top: 40px;
-      background: #f4f4f4;
+      margin: 0;
+      padding: 0;
     }
-
+    .container {
+      max-width: 400px;
+      margin: auto;
+      margin-top: 50px;
+      padding: 20px;
+      background: white;
+      border: 2px solid #ccc;
+      border-radius: 15px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.1);
+    }
     input, button {
-      font-size: 16px;
+      width: 90%;
       padding: 10px;
-      margin: 10px;
-      border-radius: 5px;
-      border: 1px solid #ccc;
+      margin: 10px 0;
+      font-size: 16px;
+      border-radius: 8px;
+      border: 1px solid #aaa;
     }
-
     button {
-      background-color: #007bff;
+      background: #007bff;
       color: white;
+      border: none;
     }
-
-    #location, #adminStatus, #userName {
-      margin-top: 20px;
+    #logoutBtn {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      font-size: 24px;
+      background: none;
+      border: none;
+      color: red;
+      cursor: pointer;
+    }
+    #welcome img {
+      vertical-align: middle;
+      margin-right: 10px;
+    }
+    #location {
+      margin-top: 15px;
       color: green;
-      font-size: 18px;
-    }
-
-    img {
-      border-radius: 50%;
-      width: 100px;
-      height: 100px;
+      font-weight: bold;
     }
   </style>
 </head>
 <body>
 
-  <div id="registerSection">
+  <button id="logoutBtn" onclick="logout()" style="display:none;">&#x274C;</button>
+
+  <div class="container" id="registerSection">
     <h2>تسجيل حساب جديد</h2>
-    <input id="fullName" placeholder="الاسم الرباعي"><br>
-    <input id="phone" placeholder="رقم الجوال"><br>
-    <input id="password" type="password" placeholder="كلمة المرور"><br>
-    <input id="profilePic" type="file" placeholder="اختر صورة"><br>
-    <button onclick="registerAccount()">تسجيل الحساب</button>
+    <input id="fullName" placeholder="الاسم الرباعي">
+    <input id="regPhone" placeholder="رقم الجوال">
+    <input id="photo" placeholder="رابط الصورة">
+    <input id="regPass" placeholder="كلمة المرور" type="password">
+    <button onclick="register()">تسجيل</button>
+    <p>لديك حساب؟ <a href="#" onclick="document.getElementById('registerSection').style.display='none'; document.getElementById('loginSection').style.display='block';">تسجيل دخول</a></p>
   </div>
 
-  <div id="loginSection" style="display:none;">
-    <h2>تسجيل دخول</h2>
-    <input id="loginPhone" placeholder="رقم الجوال"><br>
-    <input id="loginPassword" type="password" placeholder="كلمة المرور"><br>
+  <div class="container" id="loginSection" style="display:none;">
+    <h2>تسجيل الدخول</h2>
+    <input id="loginPhone" placeholder="رقم الجوال">
+    <input id="loginPass" type="password" placeholder="كلمة المرور">
     <button onclick="login()">دخول</button>
   </div>
 
-  <div id="attendanceSection" style="display:none;">
-    <h2>مرحباً، <span id="userName"></span></h2>
-    <img id="userPic" src="" alt="صورة المعلم">
-    <h2>تسجيل حضور المعلمين</h2>
-    <input id="teacherId" placeholder="اسم المعلم أو الرقم الوظيفي"><br>
+  <div class="container" id="attendanceSection" style="display:none;">
+    <h2 id="welcome"></h2>
     <button onclick="registerAttendance()">تسجيل الحضور</button>
     <div id="location"></div>
   </div>
