@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <title>نظام تحضير المعلمين</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: 'Arial'; background: #f4f4f4; text-align: center; padding: 40px; direction: rtl; }
+    input, button { padding: 12px; margin: 10px; width: 280px; font-size: 16px; }
+    .box { background: white; padding: 30px; border-radius: 12px; display: inline-block; box-shadow: 0 0 10px #aaa; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h2>تسجيل حضور المعلمين</h2>
+    <input type="text" id="teacherID" placeholder="الرقم الوظيفي"><br>
+    <input type="password" id="password" placeholder="الرقم السري"><br>
+    <button onclick="login()">تسجيل الدخول</button><br>
+    <div id="afterLogin" class="hidden">
+      <button onclick="checkIn()">تسجيل دخول</button>
+      <button onclick="checkOut()">تسجيل خروج</button>
+      <p id="message"></p>
+    </div>
+  </div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+
+  <script>
+    // إعدادات Firebase من مشروعك
+    const firebaseConfig = {
+      apiKey: "AIzaSyCr4T8GLRxtf_6LNrokjKvmBOwSkuGO5yQ",
+      authDomain: "hamsa-6009e.firebaseapp.com",
+      databaseURL: "https://hamsa-6009e-default-rtdb.firebaseio.com",
+      projectId: "hamsa-6009e",
+      storageBucket: "hamsa-6009e.firebasestorage.app",
+      messagingSenderId: "998163671039",
+      appId: "1:998163671039:web:d1930ea5b71a3a3fc729ca",
+      measurementId: "G-PD1QB8X0FE"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    function encrypt(text) {
+      return btoa(text); // تشفير Base64 مبدئي
+    }
+
+    function login() {
+      const id = document.getElementById("teacherID").value;
+      const pass = encrypt(document.getElementById("password").value);
+      db.ref("teachers/" + id).once("value", snapshot => {
+        if (snapshot.exists() && snapshot.val().password === pass) {
+          document.getElementById("afterLogin").classList.remove("hidden");
+          document.getElementById("message").innerText = "تم تسجيل الدخول بنجاح";
+        } else {
+          alert("بيانات الدخول غير صحيحة");
+        }
+      });
+    }
+
+    function checkIn() {
+      const id = document.getElementById("teacherID").value;
+      const now = new Date().toLocaleString();
+      db.ref("attendance/" + id).push({
+        type: "دخول",
+        time: now
+      });
+      document.getElementById("message").innerText = `تم تسجيل الدخول في ${now}`;
+    }
+
+    function checkOut() {
+      const id = document.getElementById("teacherID").value;
+      const now = new Date().toLocaleString();
+      db.ref("attendance/" + id).push({
+        type: "خروج",
+        time: now
+      });
+      document.getElementById("message").innerText = `تم تسجيل الخروج في ${now}`;
+    }
+  </script>
+</body>
+</html>
