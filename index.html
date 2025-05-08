@@ -2,12 +2,11 @@
 <html lang="ar">
 <head>
   <meta charset="UTF-8">
-  <title>نظام حضور المعلمين بالموقع</title>
+  <title>نظام تسجيل وحضور المعلمين</title>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
-    import { getDatabase, ref, set, push, get, child } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-database.js";
+    import { getDatabase, ref, set, get, child, push } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-database.js";
 
-    // إعداد Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyCr4T8GLRxtf_6LNrokjKvmBOwSkuGO5yQ",
       authDomain: "hamsa-6009e.firebaseapp.com",
@@ -15,31 +14,77 @@
       projectId: "hamsa-6009e",
       storageBucket: "hamsa-6009e.appspot.com",
       messagingSenderId: "998163671039",
-      appId: "1:998163671039:web:d1930ea5b71a3a3fc729ca",
-      measurementId: "G-PD1QB8X0FE"
+      appId: "1:998163671039:web:d1930ea5b71a3a3fc729ca"
     };
 
     const app = initializeApp(firebaseConfig);
     const database = getDatabase(app);
 
-    let isAdmin = false;
+    function encrypt(data) {
+      return btoa(unescape(encodeURIComponent(data)));
+    }
 
-    // تسجيل دخول
-    window.login = function () {
-      const username = document.getElementById("username").value.trim();
-      const password = document.getElementById("password").value.trim();
+    function decrypt(data) {
+      return decodeURIComponent(escape(atob(data)));
+    }
 
-      if (username === "admin" && password === "123") {
-        isAdmin = true;
-        document.getElementById("loginSection").style.display = "none";
-        document.getElementById("adminSection").style.display = "block";
-      } else {
-        document.getElementById("loginSection").style.display = "none";
-        document.getElementById("attendanceSection").style.display = "block";
+    async function convertToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    window.registerUser = async function () {
+      const fullName = document.getElementById("fullName").value.trim();
+      const phone = document.getElementById("phone").value.trim();
+      const imageInput = document.getElementById("userImage");
+      const status = document.getElementById("registerStatus");
+
+      if (!fullName || !phone || !imageInput.files[0]) {
+        status.innerText = "يرجى إدخال جميع البيانات.";
+        return;
       }
+
+      const userRef = ref(database, "users/" + phone);
+      const existing = await get(userRef);
+
+      if (existing.exists()) {
+        status.innerText = "هذا الرقم مسجل مسبقًا.";
+        return;
+      }
+
+      const imageBase64 = await convertToBase64(imageInput.files[0]);
+
+      await set(userRef, {
+        fullName: encrypt(fullName),
+        phone: encrypt(phone),
+        image: encrypt(imageBase64)
+      });
+
+      status.innerText = "تم تسجيل الحساب بنجاح.";
     };
 
-    // تحديد موقع المدرسة
+    window.login = async function () {
+      const phone = document.getElementById("loginPhone").value.trim();
+      const loginStatus = document.getElementById("loginStatus");
+
+      const userSnap = await get(child(ref(database), "users/" + phone));
+      if (!userSnap.exists()) {
+        loginStatus.innerText = "رقم الجوال غير مسجل.";
+        return;
+      }
+
+      document.getElementById("loginSection").style.display = "none";
+      document.getElementById("attendanceSection").style.display = "block";
+
+      const userData = userSnap.val();
+      document.getElementById("welcomeName").innerText = decrypt(userData.fullName);
+      document.getElementById("teacherId").value = phone;
+    };
+
     window.setSchoolLocation = function () {
       const status = document.getElementById("adminStatus");
 
@@ -61,32 +106,22 @@
       });
     };
 
-    // حساب المسافة بين نقطتين (نقطة المدرسة ونقطة المعلم)
     function getDistance(lat1, lon1, lat2, lon2) {
-      const R = 6371e3; // نصف قطر الأرض بالمتر
+      const R = 6371e3;
       const φ1 = lat1 * Math.PI / 180;
       const φ2 = lat2 * Math.PI / 180;
       const Δφ = (lat2 - lat1) * Math.PI / 180;
       const Δλ = (lon2 - lon1) * Math.PI / 180;
-
       const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
                 Math.cos(φ1) * Math.cos(φ2) *
                 Math.sin(Δλ/2) * Math.sin(Δλ/2);
       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-      const d = R * c;
-      return d;
+      return R * c;
     }
 
-    // تسجيل الحضور
     window.registerAttendance = async function () {
       const teacherId = document.getElementById("teacherId").value.trim();
       const output = document.getElementById("location");
-
-      if (teacherId === "") {
-        output.innerText = "يرجى إدخال اسم المعلم أو رقمه الوظيفي.";
-        return;
-      }
 
       if (!navigator.geolocation) {
         output.innerText = "المتصفح لا يدعم تحديد الموقع.";
@@ -110,7 +145,7 @@
           const distance = getDistance(lat, lng, schoolLat, schoolLng);
 
           if (distance > 200) {
-            output.innerHTML = `المعلم خارج نطاق المدرسة. (المسافة: ${Math.round(distance)} متر)`;
+            output.innerHTML = `أنت خارج نطاق المدرسة. (المسافة: ${Math.round(distance)} متر)`;
             return;
           }
 
@@ -136,47 +171,62 @@
       font-family: Arial, sans-serif;
       direction: rtl;
       text-align: center;
-      padding-top: 40px;
-      background: #f4f4f4;
+      background: #f9f9f9;
+      padding-top: 20px;
     }
     input, button {
-      font-size: 16px;
       padding: 10px;
-      margin: 10px;
+      margin: 5px;
+      font-size: 16px;
       border-radius: 5px;
       border: 1px solid #ccc;
     }
     button {
-      background-color: #007bff;
+      background-color: #28a745;
       color: white;
+      cursor: pointer;
     }
-    #location, #adminStatus {
+    #registerSection, #loginSection, #attendanceSection, #adminSection {
       margin-top: 20px;
+      display: none;
+    }
+    #location, #registerStatus, #loginStatus, #adminStatus {
       color: green;
-      font-size: 18px;
+      margin-top: 15px;
     }
   </style>
 </head>
 <body>
 
+  <h2>نظام تسجيل وحضور المعلمين</h2>
+
+  <div id="registerSection" style="display: block;">
+    <h3>تسجيل حساب جديد</h3>
+    <input type="text" id="fullName" placeholder="الاسم الرباعي"><br>
+    <input type="text" id="phone" placeholder="رقم الجوال"><br>
+    <input type="file" id="userImage" accept="image/*"><br>
+    <button onclick="registerUser()">تسجيل</button>
+    <div id="registerStatus"></div>
+  </div>
+
   <div id="loginSection">
-    <h2>تسجيل دخول</h2>
-    <input id="username" placeholder="اسم المستخدم"><br>
-    <input id="password" type="password" placeholder="كلمة المرور"><br>
+    <h3>تسجيل دخول</h3>
+    <input type="text" id="loginPhone" placeholder="رقم الجوال"><br>
     <button onclick="login()">دخول</button>
+    <div id="loginStatus"></div>
   </div>
 
-  <div id="adminSection" style="display:none;">
-    <h2>تحديد موقع المدرسة</h2>
-    <button onclick="setSchoolLocation()">اضغط لتحديد الموقع</button>
-    <div id="adminStatus"></div>
-  </div>
-
-  <div id="attendanceSection" style="display:none;">
-    <h2>تسجيل حضور المعلمين</h2>
-    <input id="teacherId" placeholder="اسم المعلم أو الرقم الوظيفي"><br>
+  <div id="attendanceSection">
+    <h3>مرحبًا <span id="welcomeName"></span></h3>
+    <input type="hidden" id="teacherId">
     <button onclick="registerAttendance()">تسجيل الحضور</button>
     <div id="location"></div>
+  </div>
+
+  <div id="adminSection">
+    <h3>تحديد موقع المدرسة</h3>
+    <button onclick="setSchoolLocation()">تحديد الموقع</button>
+    <div id="adminStatus"></div>
   </div>
 
 </body>
